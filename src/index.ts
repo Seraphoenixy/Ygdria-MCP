@@ -17,35 +17,31 @@ import { registerMovePlacement } from "./tools/move-placement.js";
 import { registerReplaceContent } from "./tools/replace-content.js";
 import { registerSearchNotes } from "./tools/search-notes.js";
 import { registerSearchByTag } from "./tools/search-by-tag.js";
+import { registerConvenienceTools } from "./tools/convenience.js";
 import { registerUpdateNote } from "./tools/update-note.js";
 
 export function createServer(config: Config): McpServer {
-  const client = new EtapiClient({
-    baseUrl: config.baseUrl,
-    token: config.token,
-  });
+  const client = new EtapiClient({ baseUrl: config.baseUrl });
   const server = new McpServer(
     { name: "ygdria-mcp", version: "0.1.0" },
     {
-      instructions: config.allowWrite
-        ? "Read a note before editing it and use its version. Prefer edit_content for minimal literal edits; use replace_content only when replacing the whole body is intentional. Create notes only on explicit user request. Never retry create_note after a network error. On version conflict, reconsider the change against the returned latest note. Placements, not notes, are tree nodes."
-        : "This server is read-only. To explicitly authorize writes, restart it with YGDRIA_ALLOW_WRITE=true. Placements, not notes, are tree nodes.",
+      instructions:
+        "Ygdria's local external access switch controls all tools. If disabled, ask the user to enable AI and external access in Ygdria settings, then call again; no token or restart is needed. Execute necessary reads and writes within the user-authorized task without asking for each step. Read existing content before replacing it and use its current version. Prefer focused edits. Use idempotency keys for creation and append; retry uncertain writes with the same key and parameters within 30 days. Protected notes remain inaccessible. Placements, not notes, are tree nodes.",
     },
   );
 
+  registerConvenienceTools(server, client);
   registerSearchNotes(server, client);
   registerSearchByTag(server, client);
   registerListTags(server, client);
   registerTreeNavigation(server, client);
   registerGetNote(server, client);
 
-  if (config.allowWrite) {
-    registerCreateNote(server, client);
-    registerUpdateNote(server, client);
-    registerEditContent(server, client);
-    registerReplaceContent(server, client);
-    registerMovePlacement(server, client);
-  }
+  registerCreateNote(server, client);
+  registerUpdateNote(server, client);
+  registerEditContent(server, client);
+  registerReplaceContent(server, client);
+  registerMovePlacement(server, client);
 
   server.registerResource(
     "ygdria-note",
@@ -71,7 +67,8 @@ export function createServer(config: Config): McpServer {
           {
             uri: uri.href,
             mimeType: "text/markdown",
-            text,
+            text: `<!-- Ygdria noteId=${note.id} version=${note.version} -->
+${text}`,
           },
         ],
       };

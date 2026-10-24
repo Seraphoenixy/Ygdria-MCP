@@ -12,7 +12,7 @@ const pageInput = {
 export function registerTreeNavigation(server: McpServer, client: EtapiClient): void {
   server.registerTool("list_tree_roots", {
     title: "List Ygdria tree roots",
-    description: "List only top-level tree nodes, paginated. Start tree navigation here; no complete root tree is available.",
+    description: "List only top-level tree nodes, paginated. Use resolve_tree_nodes for direct lookup or get_tree_overview for a budgeted overview.",
     inputSchema: pageInput,
     annotations: { readOnlyHint: true, openWorldHint: false },
   }, async (input) => {
@@ -39,7 +39,7 @@ export function registerTreeNavigation(server: McpServer, client: EtapiClient): 
 
   server.registerTool("get_tree_subtree", {
     title: "Get a bounded Ygdria subtree",
-    description: "Read one placement and its descendants within explicit depth and node limits; never use this to enumerate the whole tree.",
+    description: "Read one placement and its descendants within explicit depth and node limits; use get_tree_overview to explore across roots within a response budget.",
     inputSchema: {
       placementId: z.string().min(1), includeArchived: z.boolean().optional().default(false),
       maxDepth: z.number().int().min(1).max(10).default(1), maxNodes: z.number().int().min(1).max(500).default(100),

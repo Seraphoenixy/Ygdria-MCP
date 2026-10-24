@@ -1,74 +1,42 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
 import { loadConfig, parseIni } from "./config.js";
 
-test("loadConfig defaults to localhost and read-only", (context) => {
-  const directory = mkdtempSync(join(tmpdir(), "ygdria-mcp-test-"));
-  context.after(() => rmSync(directory, { recursive: true, force: true }));
-  assert.deepEqual(loadConfig({
-    YGDRIA_ETAPI_TOKEN: " token ",
-    YGDRIA_CONFIG_FILE: join(directory, "missing.ini"),
-  }), {
-    baseUrl: "http://127.0.0.1:4318",
-    token: "token",
-    allowWrite: false,
-  });
-});
-
-test("loadConfig requires explicit true to enable writes", () => {
-  assert.equal(
-    loadConfig({
-      YGDRIA_ETAPI_TOKEN: "token",
-      YGDRIA_ALLOW_WRITE: "TRUE",
-    }).allowWrite,
-    true,
-  );
-});
-
-test("loadConfig rejects base URLs containing an API path", () => {
-  assert.throws(
-    () =>
-      loadConfig({
-        YGDRIA_ETAPI_TOKEN: "token",
-        YGDRIA_ETAPI_URL: "http://localhost:4318/api/v1",
-      }),
-    /origin only/,
-  );
-});
-
-test("parseIni reads the ETAPI section without altering token characters", () => {
+test("defaults to loopback without tokens or write settings", () => {
   assert.deepEqual(
-    parseIni(`
-      ; local configuration
-      [etapi]
-      token = token-with-=characters
-      url = http://localhost:4318
-      allowWrite = true
-    `),
-    {
-      token: "token-with-=characters",
-      url: "http://localhost:4318",
-      allowWrite: "true",
-    },
+    loadConfig({ YGDRIA_CONFIG_FILE: join(tmpdir(), "ygdria-no-config.ini") }),
+    { baseUrl: "http://127.0.0.1:4318" },
   );
 });
-
-test("loadConfig reads token and settings from an INI file", (context) => {
-  const directory = mkdtempSync(join(tmpdir(), "ygdria-mcp-test-"));
-  context.after(() => rmSync(directory, { recursive: true, force: true }));
-  const configPath = join(directory, "ygdria-mcp.ini");
-  writeFileSync(
-    configPath,
-    "[etapi]\ntoken = from-ini\nurl = http://localhost:4318\nallowWrite = true\n",
-    "utf8",
-  );
-
-  assert.deepEqual(loadConfig({ YGDRIA_CONFIG_FILE: configPath }), {
-    baseUrl: "http://localhost:4318",
-    token: "from-ini",
-    allowWrite: true,
+test("reads an optional URL and ignores retired credential settings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ygdria-config-"));
+  const file = join(dir, "config.ini");
+  try {
+    writeFileSync(
+      file,
+      "[etapi]\nurl=http://localhost:4319\ntoken=legacy-secret\nallowWrite=false",
+    );
+    assert.deepEqual(loadConfig({ YGDRIA_CONFIG_FILE: file }), {
+      baseUrl: "http://localhost:4319",
+    });
+    assert.deepEqual(parseIni("[etapi]\ntoken=legacy\nallowWrite=true"), {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("rejects remote hosts and non-origin URLs", () => {
+  for (const url of [
+    "https://example.com",
+    "http://127.0.0.1/api/v1",
+    "http://user:pass@localhost",
+    "http://localhost/?q=x",
+    "file:///localhost",
+  ])
+    assert.throws(() => loadConfig({ YGDRIA_ETAPI_URL: url }));
+  assert.deepEqual(loadConfig({ YGDRIA_ETAPI_URL: "http://[::1]:4318" }), {
+    baseUrl: "http://[::1]:4318",
   });
 });

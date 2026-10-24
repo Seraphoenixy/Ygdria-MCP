@@ -3,16 +3,20 @@ import { z } from "zod";
 import { EtapiError, type EtapiClient } from "../client/etapi-client.js";
 import { failure, success, versionConflict } from "./shared.js";
 
-export function registerUpdateNote(server: McpServer, client: EtapiClient): void {
+export function registerUpdateNote(
+  server: McpServer,
+  client: EtapiClient,
+): void {
   server.registerTool(
     "update_note",
     {
       title: "Update a Ygdria note",
       description:
-        "Update title, body, or tags using the version returned by get_note. On conflict, this tool reads and returns the latest note; reconsider the edit and never retry the stale version.",
+        "Update title, body, or tags using the current version from a read, resource, or prior write response. On conflict, this tool reads and returns the latest note; reconsider the edit and never retry the stale version.",
       inputSchema: {
         noteId: z.string().min(1),
-        expectedVersion: z.number().int().nonnegative(),
+        expectedVersion: z.number().int().positive(),
+        codeLanguage: z.string().min(1).max(64).optional(),
         title: z.string().min(1).optional(),
         content: z.string().optional(),
         tags: z.array(z.string()).optional(),

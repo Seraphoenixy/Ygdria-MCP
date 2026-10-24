@@ -26,7 +26,6 @@ export class EtapiNetworkError extends Error {
 
 export interface EtapiClientOptions {
   baseUrl: string;
-  token: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -37,10 +36,12 @@ export interface CreateNoteInput {
   type?: "text" | "code";
   content: string;
   tags?: string[];
+  idempotencyKey?: string;
 }
 
 export interface UpdateNoteInput {
   expectedVersion: number;
+  codeLanguage?: string;
   title?: string;
   content?: string;
   tags?: string[];
@@ -105,8 +106,14 @@ export class EtapiClient {
     query: string,
     includeArchived = false,
     placementId?: string,
+    tag?: string,
   ): Promise<SearchNotesResponse> {
-    return this.search({ q: query, ...(placementId ? { placementId } : {}), includeArchived: String(includeArchived) });
+    return this.search({
+      ...(tag ? { tag } : {}),
+      q: query,
+      ...(placementId ? { placementId } : {}),
+      includeArchived: String(includeArchived),
+    });
   }
 
   async searchByTag(
@@ -114,14 +121,20 @@ export class EtapiClient {
     includeArchived = false,
     placementId?: string,
   ): Promise<SearchNotesResponse> {
-    return this.search({ tag, ...(placementId ? { placementId } : {}), includeArchived: String(includeArchived) });
+    return this.search({
+      tag,
+      ...(placementId ? { placementId } : {}),
+      includeArchived: String(includeArchived),
+    });
   }
 
   listTags(): Promise<unknown> {
     return this.request("/etapi/tags");
   }
 
-  private async search(params: Record<string, string>): Promise<SearchNotesResponse> {
+  private async search(
+    params: Record<string, string>,
+  ): Promise<SearchNotesResponse> {
     const response = await this.request<unknown>(
       `/etapi/search?${new URLSearchParams(params)}`,
     );
@@ -134,49 +147,76 @@ export class EtapiClient {
     const items = rawItems
       .map(asRecord)
       .filter((item) => item.isProtected !== true && item.protected !== true)
-      .map(
-        (item): SearchNoteItem => ({
-          noteId: String(item.id ?? item.noteId ?? ""),
-          title: String(item.title ?? ""),
-          snippet: stripHtml(item.snippet),
-          updatedAt: String(item.updatedAt ?? ""),
-          tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
-          ...(Array.isArray(item.matchedPlacementIds)
-            ? { matchedPlacementIds: item.matchedPlacementIds.map(String) }
-            : {}),
-        }),
-      );
+      .map((item): SearchNoteItem => ({
+        noteId: String(item.id ?? item.noteId ?? ""),
+        title: String(item.title ?? ""),
+        snippet: stripHtml(item.snippet),
+        updatedAt: String(item.updatedAt ?? ""),
+        tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+        ...(Array.isArray(item.matchedPlacementIds)
+          ? { matchedPlacementIds: item.matchedPlacementIds.map(String) }
+          : {}),
+      }));
 
     return { items };
   }
 
-  private treeParams(input: Record<string, string | number | boolean | undefined>) {
+  private treeParams(
+    input: Record<string, string | number | boolean | undefined>,
+  ) {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(input)) if (value !== undefined) params.set(key, String(value));
+    for (const [key, value] of Object.entries(input))
+      if (value !== undefined) params.set(key, String(value));
     return params;
   }
 
-  getTreeRoots(input: { includeArchived?: boolean; limit?: number; cursor?: string } = {}): Promise<unknown> {
+  getTreeRoots(
+    input: { includeArchived?: boolean; limit?: number; cursor?: string } = {},
+  ): Promise<unknown> {
     return this.request(`/etapi/tree/roots?${this.treeParams(input)}`);
   }
 
   getTreeNode(placementId: string, includeArchived = false): Promise<unknown> {
-    return this.request(`/etapi/tree/nodes/${encodeURIComponent(placementId)}?${this.treeParams({ includeArchived })}`);
+    return this.request(
+      `/etapi/tree/nodes/${encodeURIComponent(placementId)}?${this.treeParams({ includeArchived })}`,
+    );
   }
 
-  getTreeChildren(placementId: string, input: { includeArchived?: boolean; limit?: number; cursor?: string } = {}): Promise<unknown> {
-    return this.request(`/etapi/tree/nodes/${encodeURIComponent(placementId)}/children?${this.treeParams(input)}`);
+  getTreeChildren(
+    placementId: string,
+    input: { includeArchived?: boolean; limit?: number; cursor?: string } = {},
+  ): Promise<unknown> {
+    return this.request(
+      `/etapi/tree/nodes/${encodeURIComponent(placementId)}/children?${this.treeParams(input)}`,
+    );
   }
 
-  getTreeSubtree(placementId: string, input: { includeArchived?: boolean; maxDepth?: number; maxNodes?: number } = {}): Promise<unknown> {
-    return this.request(`/etapi/tree/nodes/${encodeURIComponent(placementId)}/subtree?${this.treeParams(input)}`);
+  getTreeSubtree(
+    placementId: string,
+    input: {
+      includeArchived?: boolean;
+      maxDepth?: number;
+      maxNodes?: number;
+    } = {},
+  ): Promise<unknown> {
+    return this.request(
+      `/etapi/tree/nodes/${encodeURIComponent(placementId)}/subtree?${this.treeParams(input)}`,
+    );
   }
 
-  resolveTreeNodes(input: { query: string; parentPlacementId?: string; includeArchived?: boolean; limit?: number }): Promise<unknown> {
+  resolveTreeNodes(input: {
+    query: string;
+    parentPlacementId?: string;
+    includeArchived?: boolean;
+    limit?: number;
+  }): Promise<unknown> {
     return this.request(`/etapi/tree/resolve?${this.treeParams(input)}`);
   }
 
-  async getNote(noteId: string, format: NoteFormat = "markdown"): Promise<Note> {
+  async getNote(
+    noteId: string,
+    format: NoteFormat = "markdown",
+  ): Promise<Note> {
     const params = new URLSearchParams({ format });
     const response = await this.request<unknown>(
       `/etapi/notes/${encodeURIComponent(noteId)}?${params}`,
@@ -184,10 +224,37 @@ export class EtapiClient {
     return noteFromResponse(response);
   }
 
+  getSection(noteId: string, headingPath: string[]): Promise<unknown> {
+    return this.request(
+      `/etapi/notes/${encodeURIComponent(noteId)}/section?${new URLSearchParams({ path: JSON.stringify(headingPath) })}`,
+    );
+  }
+
+  capabilities(): Promise<{ access: string }> {
+    return this.request("/etapi/capabilities");
+  }
+
+  operateNote(
+    noteId: string,
+    input: Record<string, unknown>,
+    idempotencyKey?: string,
+  ): Promise<unknown> {
+    return this.request(
+      `/etapi/notes/${encodeURIComponent(noteId)}/operations`,
+      {
+        method: "POST",
+        json: input,
+        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+      },
+    );
+  }
+
   createNote(input: CreateNoteInput): Promise<unknown> {
+    const { idempotencyKey, ...body } = input;
     return this.request("/etapi/notes", {
       method: "POST",
-      json: input,
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+      json: body,
     });
   }
 
@@ -198,18 +265,19 @@ export class EtapiClient {
     });
   }
 
-  replaceContent(noteId: string, version: number, content: string): Promise<unknown> {
-    return this.request(
-      `/etapi/notes/${encodeURIComponent(noteId)}/content`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "text/markdown; charset=utf-8",
-          "If-Match": String(version),
-        },
-        body: content,
+  replaceContent(
+    noteId: string,
+    version: number,
+    content: string,
+  ): Promise<unknown> {
+    return this.request(`/etapi/notes/${encodeURIComponent(noteId)}/content`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "If-Match": String(version),
       },
-    );
+      body: content,
+    });
   }
 
   editContent(noteId: string, input: EditContentInput): Promise<unknown> {
@@ -219,7 +287,10 @@ export class EtapiClient {
     });
   }
 
-  movePlacement(placementId: string, input: MovePlacementInput): Promise<unknown> {
+  movePlacement(
+    placementId: string,
+    input: MovePlacementInput,
+  ): Promise<unknown> {
     return this.request(
       `/etapi/placements/${encodeURIComponent(placementId)}`,
       {
@@ -246,7 +317,7 @@ export class EtapiClient {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     const headers: Record<string, string> = {
       Accept: "application/json",
-      Authorization: `Bearer ${this.options.token}`,
+      "X-Ygdria-External-Access": "1",
       ...init.headers,
     };
     let body = init.body;
@@ -262,6 +333,7 @@ export class EtapiClient {
         headers,
         body,
         signal: controller.signal,
+        redirect: "error",
       });
     } catch (error) {
       const reason =
@@ -303,9 +375,8 @@ export class EtapiClient {
 function statusMessage(status: number): string {
   switch (status) {
     case 401:
-      return "ETAPI authentication failed. Stop and update the token in ygdria-mcp.ini (or YGDRIA_ETAPI_TOKEN), then restart the MCP server.";
     case 403:
-      return "ETAPI denied this operation. Stop; permissions must not be bypassed.";
+      return "Ygdria external access is unavailable. Enable AI and external access in Ygdria settings, then call again. No token is needed.";
     case 404:
       return "The requested Ygdria note or placement does not exist.";
     case 409:

@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../index.js";
 
 test("tree navigation exposes only placement-ID based tools", async () => {
-  const server = createServer({ baseUrl: "http://127.0.0.1:4318", token: "test", allowWrite: false });
+  const server = createServer({ baseUrl: "http://127.0.0.1:4318" });
   const client = new Client({ name: "test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);

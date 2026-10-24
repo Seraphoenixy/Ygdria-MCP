@@ -3,18 +3,22 @@ import { z } from "zod";
 import type { EtapiClient } from "../client/etapi-client.js";
 import { failure, success } from "./shared.js";
 
-export function registerCreateNote(server: McpServer, client: EtapiClient): void {
+export function registerCreateNote(
+  server: McpServer,
+  client: EtapiClient,
+): void {
   server.registerTool(
     "create_note",
     {
       title: "Create a Ygdria note",
       description:
-        "Create a note only when the user explicitly requested creation. Never automatically retry this POST after a network error because it may already have succeeded.",
+        "Create a note within the user-authorized task, including necessary notes for organizing or summarizing. Use a unique idempotencyKey; on an uncertain network result retry only with the same key and identical parameters within 30 days.",
       inputSchema: {
         title: z.string().min(1),
         parentPlacementId: z.string().min(1).optional(),
         type: z.enum(["text", "code"]).optional().default("text"),
-        content: z.string(),
+        content: z.string().default(""),
+        idempotencyKey: z.string().min(1).max(200).optional(),
         tags: z.array(z.string()).optional(),
       },
       annotations: {

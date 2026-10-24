@@ -31,5 +31,6 @@ test("versionConflict reports a latest-note read failure", async () => {
   assert.equal(result.isError, true);
   const content = result.content[0];
   assert.ok(content && content.type === "text");
-  assert.equal(content.text, "missing");
+  assert.equal(JSON.parse(content.text).message, "missing");
+  assert.equal(JSON.parse(content.text).status, 404);
 });

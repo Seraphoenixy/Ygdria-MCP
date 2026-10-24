@@ -4,6 +4,9 @@ import { EtapiError, EtapiNetworkError } from "../client/etapi-client.js";
 export function success(data: unknown): CallToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    ...(data !== null && typeof data === "object" && !Array.isArray(data)
+      ? { structuredContent: data as Record<string, unknown> }
+      : {}),
   };
 }
 
@@ -16,7 +19,35 @@ export function failure(error: unknown): CallToolResult {
         : "Unexpected error while communicating with Ygdria ETAPI.";
   return {
     isError: true,
-    content: [{ type: "text", text: message }],
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          message,
+          ...(error instanceof EtapiError
+            ? {
+                status: error.status,
+                details: error.status < 500 ? error.details : undefined,
+              }
+            : {}),
+          nextAction:
+            error instanceof EtapiError
+              ? ((
+                  {
+                    401: "Enable AI and external access in Ygdria settings, then call again.",
+                    403: "Enable AI and external access in Ygdria settings; use a local native client.",
+                    404: "Resolve the target again.",
+                    409: "Read current state and reconsider the change.",
+                    422: "Read current content and regenerate unique edit targets.",
+                  } as Record<number, string>
+                )[error.status] ??
+                "Correct the request using the error details.")
+              : error instanceof EtapiNetworkError
+                ? "Check connectivity. Retry reads freely; retry creates or appends only with the same idempotency key within 30 days."
+                : "Correct parameters or local configuration using the message.",
+        }),
+      },
+    ],
   };
 }
 
