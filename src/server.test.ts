@@ -59,5 +59,6 @@ test("all tools are available under the Ygdria access switch", async () => {
     "search_notes",
     "update_note",
     "update_tags",
+    "upload_image",
   ]);
 });

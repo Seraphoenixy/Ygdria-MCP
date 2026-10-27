@@ -2,6 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EtapiClient, EtapiError, EtapiNetworkError } from "./etapi-client.js";
 
+test("image upload uses the guarded ETAPI endpoint and returns stored resource metadata", async () => {
+  const client = new EtapiClient({
+    baseUrl: "http://127.0.0.1:4318",
+    fetchImpl: mockFetch((url, init) => {
+      assert.equal(url, "http://127.0.0.1:4318/etapi/notes/n%2F1/images");
+      assert.equal(init.method, "POST");
+      assert.equal((init.headers as Record<string, string>)["X-Ygdria-External-Access"], "1");
+      assert.deepEqual(JSON.parse(String(init.body)), { filename: "a.png", dataBase64: "YWJj" });
+      return Response.json({ id: "image", url: "/api/v1/attachments/image", markdown: "![a.png](/api/v1/attachments/image)" });
+    }),
+  });
+  const result = await client.uploadImage({ noteId: "n/1", filename: "a.png", dataBase64: "YWJj" });
+  assert.equal(result.url, "/api/v1/attachments/image");
+});
+
 function mockFetch(
   handler: (url: string, init: RequestInit) => Response | Promise<Response>,
 ): typeof fetch {

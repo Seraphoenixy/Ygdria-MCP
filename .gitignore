@@ -6,3 +6,7 @@ dist/
 ygdria-mcp.ini
 *.log
 .DS_Store
+
+# Local package cache and Ygdria import/edit working files
+/.npm-cache/
+/.ygdria-*

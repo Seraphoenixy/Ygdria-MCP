@@ -9,6 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { EtapiClient } from "./client/etapi-client.js";
 import { loadConfig, type Config } from "./config.js";
 import { registerCreateNote } from "./tools/create-note.js";
+import { registerUploadImage } from "./tools/upload-image.js";
 import { registerEditContent } from "./tools/edit-content.js";
 import { registerGetNote } from "./tools/get-note.js";
 import { registerTreeNavigation } from "./tools/get-tree.js";
@@ -38,6 +39,7 @@ export function createServer(config: Config): McpServer {
   registerGetNote(server, client);
 
   registerCreateNote(server, client);
+  registerUploadImage(server, client);
   registerUpdateNote(server, client);
   registerEditContent(server, client);
   registerReplaceContent(server, client);

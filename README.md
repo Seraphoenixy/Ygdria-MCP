@@ -53,6 +53,7 @@ url = http://127.0.0.1:4318
 | `get_note` / `get_notes` | 单篇或最多 50 篇批量读取；批量支持 metadata、excerpt、full。 |
 | `get_section` | 按标题祖先路径读取唯一章节的正文和版本。 |
 | `create_note` | 在任务授权范围内创建，支持幂等键。 |
+| `upload_image` | 上传 Base64 图片，返回附件 URL 和 Markdown；再通过带版本的正文编辑插入。相同图片按内容哈希去重。 |
 | `update_note` / `replace_content` | 带版本更新元数据或正文。 |
 | `edit_content` | oldText/newText 字面精确编辑；支持预览。 |
 | `append_content` | 追加 Markdown 块或字面代码；必须带幂等键。 |
@@ -63,6 +64,8 @@ url = http://127.0.0.1:4318
 所有工具始终注册，执行权限由桌面开关决定。用户已授权的任务可连续完成必要操作，无需每步重复确认；MCP 客户端自身的确认策略仍由客户端决定。受保护笔记、系统节点保护和正文乐观并发继续有效。
 
 笔记 Resource 为 `ygdria://note/{noteId}`，返回 Markdown 和版本标记。树节点使用 placementId，笔记使用 noteId。
+
+图片导入要求主服务支持 `POST /etapi/notes/:id/images`（旧版返回 404，需升级并重启主服务）。先创建或读取目标笔记，调用 `upload_image` 传入文件名和标准 Base64 图片字节（不含 `data:` 前缀），再将返回的 `markdown` 通过带当前版本的正文编辑插入。支持 PNG、JPEG、GIF、WebP、SVG，单图最大 20 MiB。上传不修改正文；相同图片按内容哈希去重，未引用的图片遵循主服务附件清理规则。不要把 Base64 图片链接直接写入正文。
 
 目录概览的字节预算约束 items，续读元数据另计。continuation 原样传入下一次调用，并保持 maxDepth/includeArchived 一致；遍历不是快照，结构变化时可能需要重新开始。指定 placement 时返回其后代。深度未展开节点单独列出。
 

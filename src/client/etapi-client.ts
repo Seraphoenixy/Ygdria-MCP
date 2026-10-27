@@ -94,6 +94,13 @@ function noteFromResponse(value: unknown): Note {
 }
 
 export class EtapiClient {
+  async uploadImage(input: { noteId: string; filename: string; dataBase64: string }): Promise<JsonObject> {
+    return this.request(`/etapi/notes/${encodeURIComponent(input.noteId)}/images`, {
+      method: "POST",
+      json: { filename: input.filename, dataBase64: input.dataBase64 },
+    });
+  }
+
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
 
